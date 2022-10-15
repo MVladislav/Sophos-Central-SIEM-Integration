@@ -115,9 +115,9 @@ def write_xlsx_format(results, config: Config, api_client_obj: api_client.ApiCli
 
     filename = config("FILENAME_XLSX", default="result.xlsx")
     filename_a = filename.split(".")
-    if len(filename) == 2:
+    if len(filename_a) == 2:
         filename = f"{filename_a[0]}_{time.strftime('%Y%m%d-%H%M%S')}.{filename_a[1]}"
-    elif len(filename) == 1:
+    elif len(filename_a) == 1:
         filename = f"{filename_a[0]}_{time.strftime('%Y%m%d-%H%M%S')}.xlsx"
 
     with pd.ExcelWriter(os.path.join(api_client_obj.create_report_dir(), filename)) as writer:
