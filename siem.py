@@ -97,8 +97,8 @@ def write_json_format(results, config: Config):
         SIEM_LOGGER.info(json.dumps(i, ensure_ascii=False).strip())
 
 
-def write_excel_format(results, config: Config, api_client_obj: api_client.ApiClient):
-    """Write EXCEL format data.
+def write_xlsx_format(results, config: Config, api_client_obj: api_client.ApiClient):
+    """Write XLSX format data.
     Arguments:
         results {list}: data
     """
@@ -112,7 +112,7 @@ def write_excel_format(results, config: Config, api_client_obj: api_client.ApiCl
         jsonList.append(i)
     df_json = pd.DataFrame(jsonList)
 
-    with pd.ExcelWriter(os.path.join(api_client_obj.create_log_dir(), config("FILENAME_EXCEL"))) as writer:
+    with pd.ExcelWriter(os.path.join(config("SOPHOS_SIEM_HOME"), config("FILENAME_XLSX"))) as writer:
         df_json.to_excel(writer)
 
 
@@ -381,7 +381,7 @@ def load_config(config_path):
 
 
 def validate_format(format: str):
-    if format.lower() not in ("json", "keyvalue", "cef", "excel"):
+    if format.lower() not in ("json", "keyvalue", "cef", "xlsx"):
         raise Exception(f"Invalid format in {CONF_FILENAME}, format can be json, cef or keyvalue")
 
 
@@ -408,8 +408,8 @@ def get_alerts_or_events(endpoint, options, config: Config, state):
         write_keyvalue_format(results, config)
     elif config("FORMAT").lower() == "cef":
         write_cef_format(results, config)
-    elif config("FORMAT").lower() == "excel":
-        write_excel_format(results, config, api_client_obj)
+    elif config("FORMAT").lower() == "xlsx":
+        write_xlsx_format(results, config, api_client_obj)
     else:
         write_json_format(results, config)
 
