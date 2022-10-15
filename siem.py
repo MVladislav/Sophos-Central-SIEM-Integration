@@ -17,6 +17,7 @@ import logging.handlers
 import os
 import re
 import sys
+import time
 from optparse import OptionParser
 from typing import Any, Dict, List
 
@@ -112,7 +113,14 @@ def write_xlsx_format(results, config: Config, api_client_obj: api_client.ApiCli
         jsonList.append(i)
     df_json = pd.DataFrame(jsonList)
 
-    with pd.ExcelWriter(os.path.join(api_client_obj.create_report_dir(), config("FILENAME_XLSX"))) as writer:
+    filename = config("FILENAME_XLSX")
+    filename_a = filename.split(".")
+    if len(filename) == 2:
+        filename = f"{filename_a[0]}_{time.strftime('%Y%m%d-%H%M%S')}.{filename_a[1]}"
+    elif len(filename) == 1:
+        filename = f"{filename_a[0]}_{time.strftime('%Y%m%d-%H%M%S')}.xlsx"
+
+    with pd.ExcelWriter(os.path.join(api_client_obj.create_report_dir(), filename)) as writer:
         df_json.to_excel(writer)
 
 
