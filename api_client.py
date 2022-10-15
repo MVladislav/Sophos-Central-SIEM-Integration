@@ -11,24 +11,24 @@
 # implied. See the License for the specific language governing permissions and limitations under the
 # License.
 #
-import sys
 import calendar
-
-import urllib.request as urlrequest
-import urllib.error as urlerror
-from urllib.parse import urlencode
-
 import datetime
 import json
 import logging
 import logging.handlers
 import os
 import socket
-import name_mapping
-from random import randint
+import sys
 import time
-import config
+import urllib.error as urlerror
+import urllib.request as urlrequest
+from random import randint
+from urllib.parse import urlencode
 
+from starlette.config import Config
+
+import config
+import name_mapping
 
 SYSLOG_SOCKTYPE = {"udp": socket.SOCK_DGRAM, "tcp": socket.SOCK_STREAM}
 
@@ -55,7 +55,7 @@ SIEM_LOGGER = logging.getLogger("SIEM")
 
 
 class ApiClient:
-    def __init__(self, endpoint, options, config, state):
+    def __init__(self, endpoint, options, config: Config, state):
         """Class providing alerts and events data"""
 
         self.state = state
@@ -66,7 +66,7 @@ class ApiClient:
         logdir = self.create_log_dir()
         self.add_siem_logeer_handler(logdir)
         self.opener = self.create_request_builder()
-        self.get_noisy_event_types = self.get_noisy_event_types()
+        self.get_noisy_event_types = self.get_noisy_event_types_f()
 
     def log(self, log_message):
         """Write the log.
@@ -76,7 +76,7 @@ class ApiClient:
         if not self.options.quiet:
             sys.stderr.write("%s\n" % log_message)
 
-    def get_noisy_event_types(self):
+    def get_noisy_event_types_f(self):
         """Return noisy event types
         Returns:
             list -- noisy event type list
@@ -100,8 +100,8 @@ class ApiClient:
         Returns:
             log_dir {string} -- log directory path
         """
-        if "SOPHOS_SIEM_HOME" in os.environ:
-            app_path = os.environ["SOPHOS_SIEM_HOME"]
+        if self.config("SOPHOS_SIEM_HOME"):
+            app_path = self.config("SOPHOS_SIEM_HOME")
         else:
             app_path = os.path.join(os.getcwd())
 
@@ -140,26 +140,26 @@ class ApiClient:
         Arguments:
             logdir {string}: log directory path
         """
-        if self.config.filename == "syslog":
+        if self.config("FILENAME") == "syslog":
             syslog_facility = self.get_syslog_facilities()
-            facility = syslog_facility[self.config.facility]
-            address = self.config.address
+            facility = syslog_facility[self.config("FACILITY")]
+            address = self.config("ADDRESS")
             if ":" in address:
                 result = address.split(":")
                 host = result[0]
                 port = result[1]
                 address = (host, int(port))
 
-            socktype = SYSLOG_SOCKTYPE[self.config.socktype]
+            socktype = SYSLOG_SOCKTYPE[self.config("SOCKTYPE")]
             logging_handler = logging.handlers.SysLogHandler(
                 address, facility, socktype
             )
-            logging_handler.append_nul = self.config.append_nul == "true"
-        elif self.config.filename == "stdout":
+            logging_handler.append_nul = self.config("APPEND_NUL") == "true"
+        elif self.config("FILENAME") == "stdout":
             logging_handler = logging.StreamHandler(sys.stdout)
         else:
             logging_handler = logging.FileHandler(
-                os.path.join(logdir, self.config.filename), "a", encoding="utf-8"
+                os.path.join(logdir, self.config("FILENAME")), "a", encoding="utf-8"
             )
         if not SIEM_LOGGER.handlers:
             SIEM_LOGGER.addHandler(logging_handler)
@@ -225,24 +225,24 @@ class ApiClient:
 
         self.log(
             "Config endpoint=%s, filename='%s' and format='%s'"
-            % (self.endpoint, self.config.filename, self.config.format)
+            % (self.endpoint, self.config("FILENAME"), self.config("FORMAT"))
         )
 
         if (
-            self.config.client_id
-            and self.config.client_secret
+            self.config("CLIENT_ID")
+            and self.config("CLIENT_SECRET")
         ):
             tenant_obj = self.get_tenants_from_sophos()
 
             if "id" in tenant_obj:
                 results = self.make_credentials_request(
-                   endpoint_name, tenant_obj
+                    endpoint_name, tenant_obj
                 )
             else:
                 self.log("Error :: %s" % tenant_obj["error"])
                 raise Exception(tenant_obj["error"])
         else:
-            token_data = config.Token(self.config.token_info)
+            token_data = config.Token(self.config("TOKEN_INFO"))
             results = self.make_token_request(
                 endpoint_name, token_data
             )
@@ -262,7 +262,9 @@ class ApiClient:
         events_response = self.request_url(events_request_url, None, default_headers)
         if self.options.debug:
             self.log("RESPONSE: %s" % events_response)
-        events = json.loads(events_response)
+        events = None
+        if events_response is not None:
+            events = json.loads(events_response)
         return events
 
     def get_alerts_or_events_req_args(self, params, endpoint_name):
@@ -283,11 +285,11 @@ class ApiClient:
             )
         else:
             args = "&".join(["%s=%s" % (k, v) for k, v in params.items()])
-            
-        from_date_offset_minutes = self.config.alerts_from_date_offset_minutes
-        if endpoint_name=="events":
-            from_date_offset_minutes = self.config.events_from_date_offset_minutes
-        args+='&from_date_offset_minutes='+str(from_date_offset_minutes)
+
+        from_date_offset_minutes = self.config("ALERTS_FROM_DATE_OFFSET_MINUTES")
+        if endpoint_name == "events":
+            from_date_offset_minutes = self.config("EVENTS_FROM_DATE_OFFSET_MINUTES")
+        args += '&from_date_offset_minutes='+str(from_date_offset_minutes)
         return args
 
     def make_token_request(self, endpoint_name, token):
@@ -320,12 +322,11 @@ class ApiClient:
         else:
             params["from_date"] = self.get_since_value(endpoint_name)
 
-
         while True:
             args = self.get_alerts_or_events_req_args(params, endpoint_name)
             events = self.call_endpoint(token.url, default_headers, args)
 
-            if "items" in events and len(events["items"]) > 0:
+            if events and "items" in events and len(events["items"]) > 0:
                 for e in events["items"]:
                     e["datastream"] = EVENT_TYPE if (self.endpoint == EVENTS_V1) else ALERT_TYPE
                     yield e
@@ -335,12 +336,13 @@ class ApiClient:
                     % endpoint_name
                 )
             data_key = "account." + token_val + "." + state_data_key
-            self.state.save_state(data_key, events["next_cursor"])
-            if not events["has_more"]:
-                break
-            else:
-                params["cursor"] = events["next_cursor"]
-                params.pop("from_date", None)
+            if events:
+                self.state.save_state(data_key, events["next_cursor"])
+                if not events["has_more"]:
+                    break
+                else:
+                    params["cursor"] = events["next_cursor"]
+                    params.pop("from_date", None)
 
     def make_credentials_request(self, endpoint_name, tenant_obj):
         """Make alerts/events request by using API credentials.
@@ -368,12 +370,11 @@ class ApiClient:
         else:
             params["from_date"] = self.get_since_value(endpoint_name)
 
-
         while True:
             args = self.get_alerts_or_events_req_args(params, endpoint_name)
             data_region_url = tenant_obj["apiHost"] if "idType" not in tenant_obj else tenant_obj["apiHosts"]["dataRegion"]
             events = self.call_endpoint(data_region_url, default_headers, args)
-            if "items" in events and len(events["items"]) > 0:
+            if events and "items" in events and len(events["items"]) > 0:
                 for e in events["items"]:
                     e["datastream"] = (
                         EVENT_TYPE if (self.endpoint == EVENTS_V1) else ALERT_TYPE
@@ -388,14 +389,15 @@ class ApiClient:
             data_region_url_key = "tenants." + tenant_id + ".dataRegionUrl"
             last_run_key = "tenants." + tenant_id + ".lastRunAt"
 
-            self.state.save_state(cursor_key, events["next_cursor"])
-            self.state.save_state(data_region_url_key, data_region_url)
-            self.state.save_state(last_run_key, time.time())
-            if not events["has_more"]:
-                break
-            else:
-                params["cursor"] = events["next_cursor"]
-                params.pop("from_date", None)
+            if events:
+                self.state.save_state(cursor_key, events["next_cursor"])
+                self.state.save_state(data_region_url_key, data_region_url)
+                self.state.save_state(last_run_key, time.time())
+                if not events["has_more"]:
+                    break
+                else:
+                    params["cursor"] = events["next_cursor"]
+                    params.pop("from_date", None)
 
     def get_since_value(self, endpoint_name):
         """Get the since time from options if provided else take default"""
@@ -428,11 +430,11 @@ class ApiClient:
                     tenant_data = self.get_partner_organization_tenants(
                         whoami_response, access_token
                     )
-                    tenant_data["access_token"] = access_token
+                    tenant_data["access_token"] = access_token  # type: ignore
                 else:
                     if (
-                        self.config.tenant_id != ""
-                        and self.config.tenant_id
+                        self.config("TENANT_ID") != ""
+                        and self.config("TENANT_ID")
                         != whoami_response["id"]
                     ):
                         raise Exception(
@@ -440,18 +442,18 @@ class ApiClient:
                         )
                     else:
                         tenant_data = whoami_response
-                        tenant_data["access_token"] = access_token
+                        tenant_data["access_token"] = access_token  # type: ignore
                 return tenant_data
             else:
                 self.log(
                     "Whoami data not found for client id :: %s"
-                    % self.config.client_id
+                    % self.config("CLIENT_ID")
                 )
                 return whoami_response
         else:
             self.log(
                 "JWT token not found for client id :: %s"
-                % self.config.client_id
+                % self.config("CLIENT_ID")
             )
             return response
 
@@ -462,8 +464,8 @@ class ApiClient:
             dict -- response containing either of jwt token or error
         """
         self.log("fetching access_token from sophos")
-        client_id = self.config.client_id
-        client_secret = self.config.client_secret
+        client_id = self.config("CLIENT_ID")
+        client_secret = self.config("CLIENT_SECRET")
         body = {
             "grant_type": "client_credentials",
             "scope": "token",
@@ -484,9 +486,9 @@ class ApiClient:
         else:
             try:
                 response = self.request_url(
-                    self.config.auth_url, body, {}, retry_count=3
+                    self.config("AUTH_URL"), body, {}, retry_count=3
                 )
-                response_data = json.loads(response)
+                response_data = json.loads(response)  # type: ignore
 
                 self.state.save_state(
                     "account.%s.jwt" % client_id, response_data["access_token"]
@@ -514,14 +516,14 @@ class ApiClient:
         """
         self.log("fetching whoami data")
         try:
-            whoami_url = f"https://{self.config.api_host}/whoami/v1"
+            whoami_url = f"https://{self.config('API_HOST')}/whoami/v1"
             default_headers = {"Authorization": "Bearer " + access_token}
             whoami_response = self.request_url(whoami_url, None, default_headers)
 
             self.log("Whoami response: %s" % whoami_response)
-            whoami_data = json.loads(whoami_response)
+            whoami_data = json.loads(whoami_response)  # type: ignore
             self.state.save_state(
-                "account.%s.whoami" % self.config.client_id, whoami_data
+                "account.%s.whoami" % self.config("CLIENT_ID"), whoami_data
             )
             return whoami_data
         except json.decoder.JSONDecodeError as e:
@@ -539,7 +541,7 @@ class ApiClient:
         Returns:
             dict -- response containing whoami response or error
         """
-        if not self.config.tenant_id:
+        if not self.config("TENANT_ID"):
             raise Exception(
                 f"When using {whoami_response['idType']} credentials, you must specify the tenant id in config.ini"
             )
@@ -562,17 +564,17 @@ class ApiClient:
                 + "/"
                 + whoami_response["idType"]
                 + "/v1/tenants/"
-                + self.config.tenant_id
+                + self.config("TENANT_ID")
             )
             tenant_response = self.request_url(tenant_url, None, default_headers, 1)
 
             self.log("Tenant response: %s" % (tenant_response))
-            return json.loads(tenant_response)
+            return json.loads(tenant_response)  # type: ignore
 
         except json.decoder.JSONDecodeError as e:
             self.log(f"Sophos {whoami_response['idType']} tenant API response not in json format")
             return {"error": e}
         except Exception as e:
             raise Exception(
-                    f"Error getting tenant {self.config.tenant_id}, {e}"
+                f"Error getting tenant {self.config('TENANT_ID')}, {e}"
             )

@@ -12,12 +12,15 @@
 # License.
 #
 
-import re
 import configparser as ConfigParser
+import re
 
 
 class Config:
     """Class providing config values"""
+
+    format: str
+    endpoint: str
 
     def __init__(self, path):
         """Open the config file"""
@@ -34,6 +37,7 @@ class Token:
         rex_txt = r"url\: (?P<url>https\://.+), x-api-key\: (?P<api_key>.+), Authorization\: (?P<authorization>.+)$"
         rex = re.compile(rex_txt)
         m = rex.search(token_txt)
-        self.url = m.group("url")
-        self.api_key = m.group("api_key")
-        self.authorization = m.group("authorization").strip()
+        if m is not None:
+            self.url = m.group("url")
+            self.api_key = m.group("api_key")
+            self.authorization = m.group("authorization").strip()

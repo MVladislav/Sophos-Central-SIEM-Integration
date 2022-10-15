@@ -11,14 +11,16 @@
 # implied. See the License for the specific language governing permissions and limitations under the
 # License.
 #
-import sys
-import os
 import json
+import os
+import sys
 from pathlib import Path
+
+from starlette.config import Config
 
 
 class State:
-    def __init__(self, options, state_file):
+    def __init__(self, config: Config, options, state_file):
         """Class create state file and providing state file data"""
 
         if state_file and Path(state_file).suffix != ".json":
@@ -26,8 +28,8 @@ class State:
                 "Sophos state file is not in valid format. it's must be with a .json extension"
             )
         self.options = options
-        if "SOPHOS_SIEM_HOME" in os.environ:
-            app_path = os.environ["SOPHOS_SIEM_HOME"]
+        if config("SOPHOS_SIEM_HOME"):
+            app_path = config("SOPHOS_SIEM_HOME")
         else:
             app_path = os.path.join(os.getcwd())
 

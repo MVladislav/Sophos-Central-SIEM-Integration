@@ -11,23 +11,27 @@
 # implied. See the License for the specific language governing permissions and limitations under the
 # License.
 #
-import sys
 import json
 import logging
 import logging.handlers
 import os
 import re
-import state
+import sys
 from optparse import OptionParser
-import name_mapping
-import config
+from typing import Any, Dict, List
+
+from starlette.config import Config
+
 import api_client
-import vercheck
+import name_mapping
+import state
 
 VERSION = "2.1.0"
 QUIET = False
 MISSING_VALUE = "NA"
 DEFAULT_ENDPOINT = "event"
+
+CONF_FILENAME = ".env"
 
 SEVERITY_MAP = {"none": 0, "low": 1, "medium": 5, "high": 8, "very_high": 10}
 
@@ -76,10 +80,12 @@ def is_valid_fqdn(fqdn):
     fqdn = fqdn[:-1] if fqdn.endswith(".") else fqdn  # chomp trailing period
     return fqdn and len(fqdn) < 256 and all(part and len(part) < 64 and re.match(r"^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$", part) for part in fqdn.split("."))
 
+
 def convert_to_valid_fqdn(value):
     return ".".join([re.sub("[^-a-z0-9]+", "-", x.strip()).strip("-") for x in value.lower().split(".") if x.strip()])
 
-def write_json_format(results, config):
+
+def write_json_format(results, config: Config):
     """Write JSON format data.
     Arguments:
         results {list}: data
@@ -91,7 +97,24 @@ def write_json_format(results, config):
         SIEM_LOGGER.info(json.dumps(i, ensure_ascii=False).strip())
 
 
-def write_keyvalue_format(results, config):
+def write_excel_format(results, config: Config, api_client_obj: api_client.ApiClient):
+    """Write EXCEL format data.
+    Arguments:
+        results {list}: data
+    """
+    import pandas as pd
+
+    jsonList: List[Dict[Any, Any]] = []
+    for i in results:
+        i = remove_null_values(i)
+        update_cef_keys(i, config)
+        name_mapping.update_fields(log, i)
+        jsonList.append(i)
+    df_json = pd.DataFrame(jsonList)
+    df_json.to_excel(os.path.join(api_client_obj.create_log_dir(), config("FILENAME_EXCEL")))
+
+
+def write_keyvalue_format(results, config: Config):
     """Write key value format data.
     Arguments:
         results {dict}: results
@@ -113,7 +136,7 @@ def write_keyvalue_format(results, config):
         )
 
 
-def write_cef_format(results, config):
+def write_cef_format(results, config: Config):
     """Write CEF format data.
     Arguments:
         results {list}: data
@@ -218,7 +241,7 @@ def extract_prefix_fields(data):
     return fields
 
 
-def update_cef_keys(data, config):
+def update_cef_keys(data, config: Config):
     """ Replace if there is a mapped CEF key
     Arguments:
         data {dict}: data
@@ -228,13 +251,13 @@ def update_cef_keys(data, config):
         new_key = CEF_MAPPING.get(key, key)
         if new_key == key:
             continue
-        if config.convert_dhost_field_to_valid_fqdn.lower() == "true" and new_key == "dhost" and not is_valid_fqdn(value):
+        if config("CONVERT_DHOST_FIELD_TO_VALID_FQDN").lower() == "true" and new_key == "dhost" and not is_valid_fqdn(value):
             value = convert_to_valid_fqdn(value)
         data[new_key] = value
         del data[key]
 
 
-def format_cef(data, config):
+def format_cef(data, config: Config):
     """ Message CEF formatted
     Arguments:
         data {dict}: data
@@ -276,15 +299,15 @@ def parse_args_options():
         # Setup path
         app_path = os.path.join(os.getcwd())
 
-    config_file = os.path.join(app_path, "config.ini")
+    config_file = os.path.join(app_path, CONF_FILENAME)
 
     parser = OptionParser(
         description="Download event and/or alert data and output to various formats. "
-        "config.ini is a configuration file that exists by default in the siem-scripts "
+        f"{CONF_FILENAME} is a configuration file that exists by default in the siem-scripts "
         "folder."
         "Script keeps tab of its state, it will always pick-up from where it left-off "
         "based on a state file stored in state folder. Set SOPHOS_SIEM_HOME environment "
-        "variable to point to the folder where config.ini, mapping files, state "
+        f"variable to point to the folder where {CONF_FILENAME}, mapping files, state "
         "and log folders will be located. state and log folders are created when the "
         "script is run for the first time. "
     )
@@ -302,7 +325,7 @@ def parse_args_options():
         "--config",
         default=config_file,
         action="store",
-        help="Specify a configuration file, " "defaults to config.ini",
+        help="Specify a configuration file, " f"defaults to {CONF_FILENAME}",
     )
     parser.add_option(
         "-l",
@@ -346,25 +369,27 @@ def load_config(config_path):
     Arguments:
         config_path {str}: config file path
     Returns:
-        cfg {dice}: config.ini data
+        cfg {dice}: config file data
     """
-    cfg = config.Config(config_path)
-    cfg.format = cfg.format.lower()
-    cfg.endpoint = cfg.endpoint.lower()
-    validate_format(cfg.format)
-    validate_endpoint(cfg.endpoint)
+
+    cfg: Config = Config(config_path)
+    validate_format(cfg("FORMAT"))
+    validate_endpoint(cfg("ENDPOINT"))
     return cfg
 
-def validate_format(format):
-    if format not in ("json", "keyvalue", "cef"):
-        raise Exception("Invalid format in config.ini, format can be json, cef or keyvalue")
 
-def validate_endpoint(endpoint):
+def validate_format(format: str):
+    if format.lower() not in ("json", "keyvalue", "cef"):
+        raise Exception(f"Invalid format in {CONF_FILENAME}, format can be json, cef or keyvalue")
+
+
+def validate_endpoint(endpoint: str):
     endpoint_map = api_client.ENDPOINT_MAP
-    if endpoint not in endpoint_map:
-        raise Exception("Invalid endpoint in config.ini, endpoint can be event, alert or all")
+    if endpoint.lower() not in endpoint_map:
+        raise Exception(f"Invalid endpoint in {CONF_FILENAME}, endpoint can be event, alert or all")
 
-def get_alerts_or_events(endpoint, options, config, state):
+
+def get_alerts_or_events(endpoint, options, config: Config, state):
     """ Get alerts/events data
     Arguments:
         endpoint {str}: endpoint name
@@ -372,19 +397,22 @@ def get_alerts_or_events(endpoint, options, config, state):
         config {dict}: config file details
         state {dict}: state file details
     """
-    api_client_obj = api_client.ApiClient(endpoint, options, config, state)
+    api_client_obj: api_client.ApiClient = api_client.ApiClient(endpoint, options, config, state)
     results = api_client_obj.get_alerts_or_events()
 
-    if config.format == "json":
+    if config("FORMAT").lower() == "json":
         write_json_format(results, config)
-    elif config.format == "keyvalue":
+    elif config("FORMAT").lower() == "keyvalue":
         write_keyvalue_format(results, config)
-    elif config.format == "cef":
+    elif config("FORMAT").lower() == "cef":
         write_cef_format(results, config)
+    elif config("FORMAT").lower() == "excel":
+        write_excel_format(results, config, api_client_obj)
     else:
         write_json_format(results, config)
 
-def run(options, config_data, state):
+
+def run(options, config_data: Config, state):
     """ Call the fetch alerts/events method
     Arguments:
         options {dict}: options
@@ -392,8 +420,8 @@ def run(options, config_data, state):
         state {dict}: state file details
     """
     endpoint_map = api_client.ENDPOINT_MAP
-    if config_data.endpoint in endpoint_map:
-        tuple_endpoint = endpoint_map[config_data.endpoint]
+    if config_data("ENDPOINT").lower() in endpoint_map:
+        tuple_endpoint = endpoint_map[config_data("ENDPOINT").lower()]
     else:
         tuple_endpoint = endpoint_map[DEFAULT_ENDPOINT]
 
@@ -405,10 +433,10 @@ def run(options, config_data, state):
 
 def main():
     options = parse_args_options()
-    config_data = load_config(options.config)
-    state_data = state.State(options, config_data.state_file_path)
+    config_data: Config = load_config(options.config)
+    state_data = state.State(config_data, options, config_data("STATE_FILE_PATH"))
     run(options, config_data, state_data)
+
 
 if __name__ == "__main__":
     main()
-    
