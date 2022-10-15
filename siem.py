@@ -98,7 +98,7 @@ def write_json_format(results, config: Config):
         SIEM_LOGGER.info(json.dumps(i, ensure_ascii=False).strip())
 
 
-def write_xlsx_format(results, config: Config, api_client_obj: api_client.ApiClient):
+def write_xlsx_format(results, endpoint, config: Config, api_client_obj: api_client.ApiClient):
     """Write XLSX format data.
     Arguments:
         results {list}: data
@@ -116,9 +116,9 @@ def write_xlsx_format(results, config: Config, api_client_obj: api_client.ApiCli
     filename = config("FILENAME_XLSX", default="result.xlsx")
     filename_a = filename.split(".")
     if len(filename_a) == 2:
-        filename = f"{filename_a[0]}_{time.strftime('%Y%m%d-%H%M%S')}.{filename_a[1]}"
+        filename = f"{filename_a[0]}_{endpoint.split('/')[-1]}_{time.strftime('%Y%m%d-%H%M%S')}.{filename_a[1]}"
     elif len(filename_a) == 1:
-        filename = f"{filename_a[0]}_{time.strftime('%Y%m%d-%H%M%S')}.xlsx"
+        filename = f"{filename_a[0]}_{endpoint.split('/')[-1]}_{time.strftime('%Y%m%d-%H%M%S')}.xlsx"
 
     with pd.ExcelWriter(os.path.join(api_client_obj.create_report_dir(), filename)) as writer:
         df_json.to_excel(writer)
@@ -417,7 +417,7 @@ def get_alerts_or_events(endpoint, options, config: Config, state):
     elif config("FORMAT", default="json").lower() == "cef":
         write_cef_format(results, config)
     elif config("FORMAT", default="json").lower() == "xlsx":
-        write_xlsx_format(results, config, api_client_obj)
+        write_xlsx_format(results, endpoint, config, api_client_obj)
     else:
         write_json_format(results, config)
 
