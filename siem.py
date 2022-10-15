@@ -379,7 +379,7 @@ def load_config(config_path):
 
 
 def validate_format(format: str):
-    if format.lower() not in ("json", "keyvalue", "cef"):
+    if format.lower() not in ("json", "keyvalue", "cef", "excel"):
         raise Exception(f"Invalid format in {CONF_FILENAME}, format can be json, cef or keyvalue")
 
 

@@ -241,11 +241,16 @@ class ApiClient:
             else:
                 self.log("Error :: %s" % tenant_obj["error"])
                 raise Exception(tenant_obj["error"])
-        else:
+        elif self.config("TOKEN_INFO"):
             token_data = config.Token(self.config("TOKEN_INFO"))
             results = self.make_token_request(
                 endpoint_name, token_data
             )
+        else:
+            self.log(
+                "Error :: No credentials specified. set 'CLIENT_ID' & 'CLIENT_SECRET' or 'TOKEN_INFO'."
+            )
+            results = None
         return results
 
     def call_endpoint(self, api_host, default_headers, args):
