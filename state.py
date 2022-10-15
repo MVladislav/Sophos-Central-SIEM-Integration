@@ -28,8 +28,8 @@ class State:
                 "Sophos state file is not in valid format. it's must be with a .json extension"
             )
         self.options = options
-        if config("SOPHOS_SIEM_HOME"):
-            app_path = config("SOPHOS_SIEM_HOME")
+        if config("SOPHOS_SIEM_HOME", default="/var/log/sophos"):
+            app_path = config("SOPHOS_SIEM_HOME", default="/var/log/sophos")
         else:
             app_path = os.path.join(os.getcwd())
 

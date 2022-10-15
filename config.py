@@ -12,23 +12,7 @@
 # License.
 #
 
-import configparser as ConfigParser
 import re
-
-
-class Config:
-    """Class providing config values"""
-
-    format: str
-    endpoint: str
-
-    def __init__(self, path):
-        """Open the config file"""
-        self.config = ConfigParser.ConfigParser()
-        self.config.read(path)
-
-    def __getattr__(self, name):
-        return self.config.get("login", name)
 
 
 class Token:

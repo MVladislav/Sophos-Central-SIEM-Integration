@@ -113,7 +113,7 @@ def write_xlsx_format(results, config: Config, api_client_obj: api_client.ApiCli
         jsonList.append(i)
     df_json = pd.DataFrame(jsonList)
 
-    filename = config("FILENAME_XLSX")
+    filename = config("FILENAME_XLSX", default="result.xlsx")
     filename_a = filename.split(".")
     if len(filename) == 2:
         filename = f"{filename_a[0]}_{time.strftime('%Y%m%d-%H%M%S')}.{filename_a[1]}"
@@ -261,7 +261,7 @@ def update_cef_keys(data, config: Config):
         new_key = CEF_MAPPING.get(key, key)
         if new_key == key:
             continue
-        if config("CONVERT_DHOST_FIELD_TO_VALID_FQDN").lower() == "true" and new_key == "dhost" and not is_valid_fqdn(value):
+        if config("CONVERT_DHOST_FIELD_TO_VALID_FQDN", default="true").lower() == "true" and new_key == "dhost" and not is_valid_fqdn(value):
             value = convert_to_valid_fqdn(value)
         data[new_key] = value
         del data[key]
@@ -383,8 +383,8 @@ def load_config(config_path):
     """
 
     cfg: Config = Config(config_path)
-    validate_format(cfg("FORMAT"))
-    validate_endpoint(cfg("ENDPOINT"))
+    validate_format(cfg("FORMAT", default="json"))
+    validate_endpoint(cfg("ENDPOINT", default="event"))
     return cfg
 
 
@@ -410,13 +410,13 @@ def get_alerts_or_events(endpoint, options, config: Config, state):
     api_client_obj: api_client.ApiClient = api_client.ApiClient(endpoint, options, config, state)
     results = api_client_obj.get_alerts_or_events()
 
-    if config("FORMAT").lower() == "json":
+    if config("FORMAT", default="json").lower() == "json":
         write_json_format(results, config)
-    elif config("FORMAT").lower() == "keyvalue":
+    elif config("FORMAT", default="json").lower() == "keyvalue":
         write_keyvalue_format(results, config)
-    elif config("FORMAT").lower() == "cef":
+    elif config("FORMAT", default="json").lower() == "cef":
         write_cef_format(results, config)
-    elif config("FORMAT").lower() == "xlsx":
+    elif config("FORMAT", default="json").lower() == "xlsx":
         write_xlsx_format(results, config, api_client_obj)
     else:
         write_json_format(results, config)
@@ -430,8 +430,8 @@ def run(options, config_data: Config, state):
         state {dict}: state file details
     """
     endpoint_map = api_client.ENDPOINT_MAP
-    if config_data("ENDPOINT").lower() in endpoint_map:
-        tuple_endpoint = endpoint_map[config_data("ENDPOINT").lower()]
+    if config_data("ENDPOINT", default="event").lower() in endpoint_map:
+        tuple_endpoint = endpoint_map[config_data("ENDPOINT", default="event").lower()]
     else:
         tuple_endpoint = endpoint_map[DEFAULT_ENDPOINT]
 
@@ -444,7 +444,7 @@ def run(options, config_data: Config, state):
 def main():
     options = parse_args_options()
     config_data: Config = load_config(options.config)
-    state_data = state.State(config_data, options, config_data("STATE_FILE_PATH"))
+    state_data = state.State(config_data, options, config_data("STATE_FILE_PATH", default="state/siem_sophos.json"))
     run(options, config_data, state_data)
 
 

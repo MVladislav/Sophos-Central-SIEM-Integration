@@ -100,8 +100,8 @@ class ApiClient:
         Returns:
             log_dir {string} -- log directory path
         """
-        if self.config("SOPHOS_SIEM_HOME"):
-            app_path = self.config("SOPHOS_SIEM_HOME")
+        if self.config("SOPHOS_SIEM_HOME", default="/var/log/sophos"):
+            app_path = self.config("SOPHOS_SIEM_HOME", default="/var/log/sophos")
         else:
             app_path = os.path.join(os.getcwd())
 
@@ -120,8 +120,8 @@ class ApiClient:
         Returns:
             report_dir {string} -- report directory path
         """
-        if self.config("SOPHOS_SIEM_HOME"):
-            app_path = self.config("SOPHOS_SIEM_HOME")
+        if self.config("SOPHOS_SIEM_HOME", default="/var/log/sophos"):
+            app_path = self.config("SOPHOS_SIEM_HOME", default="/var/log/sophos")
         else:
             app_path = os.path.join(os.getcwd())
 
@@ -160,26 +160,26 @@ class ApiClient:
         Arguments:
             logdir {string}: log directory path
         """
-        if self.config("FILENAME") == "syslog":
+        if self.config("FILENAME", default="result.txt") == "syslog":
             syslog_facility = self.get_syslog_facilities()
-            facility = syslog_facility[self.config("FACILITY")]
-            address = self.config("ADDRESS")
+            facility = syslog_facility[self.config("FACILITY", default="daemon")]
+            address = self.config("ADDRESS", default="/dev/log")
             if ":" in address:
                 result = address.split(":")
                 host = result[0]
                 port = result[1]
                 address = (host, int(port))
 
-            socktype = SYSLOG_SOCKTYPE[self.config("SOCKTYPE")]
+            socktype = SYSLOG_SOCKTYPE[self.config("SOCKTYPE", default="udp")]
             logging_handler = logging.handlers.SysLogHandler(
                 address, facility, socktype
             )
-            logging_handler.append_nul = self.config("APPEND_NUL") == "true"
-        elif self.config("FILENAME") == "stdout":
+            logging_handler.append_nul = self.config("APPEND_NUL", default="false") == "true"
+        elif self.config("FILENAME", default="result.txt") == "stdout":
             logging_handler = logging.StreamHandler(sys.stdout)
         else:
             logging_handler = logging.FileHandler(
-                os.path.join(logdir, self.config("FILENAME")), "a", encoding="utf-8"
+                os.path.join(logdir, self.config("FILENAME", default="result.txt")), "a", encoding="utf-8"
             )
         if not SIEM_LOGGER.handlers:
             SIEM_LOGGER.addHandler(logging_handler)
@@ -245,7 +245,7 @@ class ApiClient:
 
         self.log(
             "Config endpoint=%s, filename='%s' and format='%s'"
-            % (self.endpoint, self.config("FILENAME"), self.config("FORMAT"))
+            % (self.endpoint, self.config("FILENAME", default="result.txt"), self.config("FORMAT", default="json"))
         )
 
         if (
@@ -311,9 +311,9 @@ class ApiClient:
         else:
             args = "&".join(["%s=%s" % (k, v) for k, v in params.items()])
 
-        from_date_offset_minutes = self.config("ALERTS_FROM_DATE_OFFSET_MINUTES")
+        from_date_offset_minutes = self.config("ALERTS_FROM_DATE_OFFSET_MINUTES", default="0")
         if endpoint_name == "events":
-            from_date_offset_minutes = self.config("EVENTS_FROM_DATE_OFFSET_MINUTES")
+            from_date_offset_minutes = self.config("EVENTS_FROM_DATE_OFFSET_MINUTES", default="0")
         args += '&from_date_offset_minutes='+str(from_date_offset_minutes)
         return args
 
@@ -458,8 +458,8 @@ class ApiClient:
                     tenant_data["access_token"] = access_token  # type: ignore
                 else:
                     if (
-                        self.config("TENANT_ID") != ""
-                        and self.config("TENANT_ID")
+                        self.config("TENANT_ID", default="") != ""
+                        and self.config("TENANT_ID", default="")
                         != whoami_response["id"]
                     ):
                         raise Exception(
@@ -511,7 +511,7 @@ class ApiClient:
         else:
             try:
                 response = self.request_url(
-                    self.config("AUTH_URL"), body, {}, retry_count=3
+                    self.config("AUTH_URL", default="https://id.sophos.com/api/v2/oauth2/token"), body, {}, retry_count=3
                 )
                 response_data = json.loads(response)  # type: ignore
 
@@ -541,7 +541,7 @@ class ApiClient:
         """
         self.log("fetching whoami data")
         try:
-            whoami_url = f"https://{self.config('API_HOST')}/whoami/v1"
+            whoami_url = f"https://{self.config('API_HOST',default='api.central.sophos.com')}/whoami/v1"
             default_headers = {"Authorization": "Bearer " + access_token}
             whoami_response = self.request_url(whoami_url, None, default_headers)
 
