@@ -115,6 +115,26 @@ class ApiClient:
                 sys.exit(1)
         return log_dir
 
+    def create_report_dir(self):
+        """Create the report directory
+        Returns:
+            report_dir {string} -- report directory path
+        """
+        if self.config("SOPHOS_SIEM_HOME"):
+            app_path = self.config("SOPHOS_SIEM_HOME")
+        else:
+            app_path = os.path.join(os.getcwd())
+
+        report_dir = os.path.join(app_path, "reports")
+        if not os.path.exists(report_dir):
+            try:
+                os.makedirs(report_dir)
+                return report_dir
+            except OSError as e:
+                self.log("Failed to create %s, %s" % (report_dir, str(e)))
+                sys.exit(1)
+        return report_dir
+
     def get_syslog_facilities(self):
         """Create a mapping between our names and the python syslog defines
         Returns:

@@ -112,7 +112,7 @@ def write_xlsx_format(results, config: Config, api_client_obj: api_client.ApiCli
         jsonList.append(i)
     df_json = pd.DataFrame(jsonList)
 
-    with pd.ExcelWriter(os.path.join(config("SOPHOS_SIEM_HOME"), config("FILENAME_XLSX"))) as writer:
+    with pd.ExcelWriter(os.path.join(api_client_obj.create_report_dir(), config("FILENAME_XLSX"))) as writer:
         df_json.to_excel(writer)
 
 
