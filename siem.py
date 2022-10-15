@@ -111,7 +111,9 @@ def write_excel_format(results, config: Config, api_client_obj: api_client.ApiCl
         name_mapping.update_fields(log, i)
         jsonList.append(i)
     df_json = pd.DataFrame(jsonList)
-    df_json.to_excel(os.path.join(api_client_obj.create_log_dir(), config("FILENAME_EXCEL")))
+
+    with pd.ExcelWriter(os.path.join(api_client_obj.create_log_dir(), config("FILENAME_EXCEL"))) as writer:
+        df_json.to_excel(writer)
 
 
 def write_keyvalue_format(results, config: Config):
